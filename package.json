@@ -1,0 +1,41 @@
+{
+  "name": "slagtech-agent-control",
+  "version": "0.1.0",
+  "description": "Executable anti-slop guardrails for AI-assisted web development. Works with opencode, Claude Code, Cursor, Copilot and any CLI or MCP-capable agent.",
+  "type": "module",
+  "bin": {
+    "slag": "./bin/slag.js",
+    "slagctl": "./bin/slag.js"
+  },
+  "exports": {
+    ".": "./src/index.js",
+    "./schema": "./schema.json"
+  },
+  "files": [
+    "bin",
+    "src",
+    "schema.json",
+    "README.md",
+    "facts.schema.json"
+  ],
+  "engines": {
+    "node": ">=18.17"
+  },
+  "scripts": {
+    "test": "node --test test/",
+    "lint": "node --check bin/slag.js && node --check src/cli.js",
+    "verify": "node bin/slag.js audit"
+  },
+  "keywords": [
+    "ai",
+    "agents",
+    "guardrails",
+    "opencode",
+    "claude-code",
+    "cursor",
+    "mcp",
+    "web-development",
+    "anti-slop"
+  ],
+  "license": "MIT"
+}

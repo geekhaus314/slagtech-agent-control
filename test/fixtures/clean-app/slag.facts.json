@@ -1,0 +1,141 @@
+{
+  "$schema": "../../../slag.facts.schema.json",
+  "version": 1,
+  "facts": [
+    {
+      "id": "delivery.mode",
+      "value": "production",
+      "status": "confirmed",
+      "source": "fixture: production example",
+      "required": true,
+      "evidence": [],
+      "question": "Production or prototype?"
+    },
+    {
+      "id": "scope.core",
+      "value": "Visitor reads the post list and the server stores new posts.",
+      "status": "confirmed",
+      "source": "fixture: scope",
+      "required": true,
+      "evidence": [],
+      "question": "Core actions?"
+    },
+    {
+      "id": "scope.out",
+      "value": "Editing, deleting and authentication are out of scope.",
+      "status": "confirmed",
+      "source": "fixture: scope",
+      "required": false,
+      "evidence": [],
+      "question": "Out of scope?"
+    },
+    {
+      "id": "stack.frontend",
+      "value": "Next.js 15 with React 19",
+      "status": "confirmed",
+      "source": "fixture: stack",
+      "required": true,
+      "evidence": [],
+      "question": "Frontend?"
+    },
+    {
+      "id": "stack.backend",
+      "value": "Next.js route handlers",
+      "status": "confirmed",
+      "source": "fixture: stack",
+      "required": true,
+      "evidence": [],
+      "question": "Backend?"
+    },
+    {
+      "id": "stack.database",
+      "value": "SQLite via better-sqlite3",
+      "status": "confirmed",
+      "source": "fixture: stack",
+      "required": true,
+      "evidence": [],
+      "question": "Database?"
+    },
+    {
+      "id": "data.entities",
+      "value": "Post",
+      "status": "confirmed",
+      "source": "fixture: data",
+      "required": false,
+      "evidence": [],
+      "question": "Entities?"
+    },
+    {
+      "id": "auth.model",
+      "value": "none",
+      "status": "confirmed",
+      "source": "fixture: public read and write",
+      "required": true,
+      "evidence": [],
+      "question": "Auth?"
+    },
+    {
+      "id": "payments",
+      "value": "none",
+      "status": "confirmed",
+      "source": "fixture: no payments",
+      "required": false,
+      "evidence": [],
+      "question": "Payments?"
+    },
+    {
+      "id": "integrations",
+      "value": "none",
+      "status": "confirmed",
+      "source": "fixture: no integrations",
+      "required": false,
+      "evidence": [],
+      "question": "Integrations?"
+    },
+    {
+      "id": "deployment",
+      "value": "local Node.js",
+      "status": "confirmed",
+      "source": "fixture: local only",
+      "required": true,
+      "evidence": [],
+      "question": "Deployment?"
+    },
+    {
+      "id": "quality.acceptance",
+      "value": "npm test passes and the route reads and writes SQLite.",
+      "status": "confirmed",
+      "source": "fixture: acceptance",
+      "required": true,
+      "evidence": [],
+      "question": "Definition of done?"
+    },
+    {
+      "id": "data.seed",
+      "value": "test fixtures only",
+      "status": "confirmed",
+      "source": "fixture: no seed data",
+      "required": false,
+      "evidence": [],
+      "question": "Seed data?"
+    },
+    {
+      "id": "design.direction",
+      "value": "Plain editorial layout with visible focus styles.",
+      "status": "confirmed",
+      "source": "fixture: design",
+      "required": false,
+      "evidence": [],
+      "question": "Design?"
+    },
+    {
+      "id": "nonfunctional",
+      "value": "Server-rendered pages, WCAG AA contrast, no client-side secrets.",
+      "status": "confirmed",
+      "source": "fixture: nonfunctional",
+      "required": false,
+      "evidence": [],
+      "question": "Nonfunctional?"
+    }
+  ]
+}

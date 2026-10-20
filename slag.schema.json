@@ -1,0 +1,98 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/geekhaus314/slagtech-agent-control/schema.json",
+  "title": "Slag project configuration",
+  "description": "Anti-slop guardrail configuration. Facts live in slag.facts.json; this file controls rules, capabilities and verification.",
+  "type": "object",
+  "properties": {
+    "$schema": { "type": "string" },
+    "version": { "const": 1 },
+    "strictness": {
+      "enum": ["relaxed", "standard", "strict"],
+      "default": "standard",
+      "description": "Base severity profile before delivery mode adjustments."
+    },
+    "mode": {
+      "enum": ["auto", "production", "prototype"],
+      "default": "auto",
+      "description": "auto reads delivery.mode from facts. production enforces completeness; prototype relaxes presentation rules but never security."
+    },
+    "framework": { "type": "string", "description": "Detected or declared frontend framework. Informational." },
+    "factsFile": {
+      "description": "Path to the facts contract. Set to null to disable facts checks.",
+      "anyOf": [{ "type": "string" }, { "type": "null" }, { "const": false }]
+    },
+    "include": { "type": "array", "items": { "type": "string" } },
+    "ignore": { "type": "array", "items": { "type": "string" } },
+    "commands": {
+      "type": "object",
+      "description": "Commands used by `slag verify`. Use null or false to disable a detected command.",
+      "properties": {
+        "install": { "type": ["string", "null", "boolean"] },
+        "build": { "type": ["string", "null", "boolean"] },
+        "typecheck": { "type": ["string", "null", "boolean"] },
+        "lint": { "type": ["string", "null", "boolean"] },
+        "test": { "type": ["string", "null", "boolean"] },
+        "e2e": { "type": ["string", "null", "boolean"] }
+      },
+      "additionalProperties": { "type": ["string", "null", "boolean"] }
+    },
+    "capabilities": {
+      "type": "array",
+      "description": "Required behaviors that must have evidence files and can be tied to a verification command.",
+      "items": {
+        "type": "object",
+        "required": ["id"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$" },
+          "description": { "type": "string" },
+          "required": { "type": "boolean", "default": true },
+          "evidence": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Glob patterns for files that prove the capability exists."
+          },
+          "verifiedBy": {
+            "type": "string",
+            "description": "Name of a verification command that proves the capability (e.g. test, e2e)."
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "rules": {
+      "type": "object",
+      "description": "Per-rule severity override. Use \"off\" to disable a rule.",
+      "additionalProperties": {
+        "enum": ["off", "info", "warn", "error", true, false]
+      }
+    },
+    "limits": {
+      "type": "object",
+      "properties": {
+        "maxFileBytes": { "type": "integer", "minimum": 1000 },
+        "maxFiles": { "type": "integer", "minimum": 1 },
+        "maxTodo": { "type": "integer", "minimum": 0 },
+        "maxAnyPerFile": { "type": "integer", "minimum": 0 },
+        "maxFileLines": { "type": "integer", "minimum": 50 },
+        "maxConsoleLogs": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": false
+    },
+    "verification": {
+      "type": "object",
+      "properties": {
+        "timeoutMs": { "type": "integer", "minimum": 1000 },
+        "requireEvidence": { "type": "boolean", "default": true },
+        "requiredCommands": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Command names that must have passed evidence before the gate passes. Empty means all detected commands."
+        },
+        "allowNoCommands": { "type": "boolean", "default": false }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": true
+}

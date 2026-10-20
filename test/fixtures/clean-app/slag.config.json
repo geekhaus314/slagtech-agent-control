@@ -1,0 +1,10 @@
+{
+  "$schema": "../../../slag.schema.json",
+  "version": 1,
+  "strictness": "standard",
+  "mode": "auto",
+  "factsFile": "slag.facts.json",
+  "commands": {
+    "test": "npm run test"
+  }
+}

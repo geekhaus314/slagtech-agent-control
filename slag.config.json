@@ -1,0 +1,97 @@
+{
+  "$schema": "./slag.schema.json",
+  "version": 1,
+  "strictness": "standard",
+  "mode": "auto",
+  "factsFile": "slag.facts.json",
+  "framework": "auto",
+  "include": [
+    "**/*"
+  ],
+  "ignore": [
+    "src/rules/**",
+    "src/adapters/**",
+    "test/fixtures/**",
+    ".opencode/**",
+    "AGENTS.md",
+    "CLAUDE.md",
+    "slag.schema.json",
+    "slag.facts.schema.json"
+  ],
+  "commands": {
+    "lint": "npm run lint",
+    "test": "npm run test"
+  },
+  "capabilities": [
+    {
+      "id": "facts-intake",
+      "description": "Collect and enforce a facts contract before code is written.",
+      "required": true,
+      "evidence": [
+        "src/core/facts.js",
+        "src/commands/brief.js"
+      ],
+      "verifiedBy": "test"
+    },
+    {
+      "id": "static-audit",
+      "description": "Audit project files for slop, fake wiring, mock backends and hallucinations.",
+      "required": true,
+      "evidence": [
+        "src/core/engine.js",
+        "src/rules/index.js"
+      ],
+      "verifiedBy": "test"
+    },
+    {
+      "id": "verification-evidence",
+      "description": "Run project verification commands and persist evidence.",
+      "required": true,
+      "evidence": [
+        "src/core/verify.js",
+        "src/commands/verify.js"
+      ],
+      "verifiedBy": "test"
+    },
+    {
+      "id": "completion-gate",
+      "description": "Block completion on failed audit, unconfirmed facts or stale evidence.",
+      "required": true,
+      "evidence": [
+        "src/core/verify.js",
+        "src/commands/gate.js"
+      ],
+      "verifiedBy": "test"
+    },
+    {
+      "id": "agent-adapters",
+      "description": "Install managed guardrail instructions into agent tool files.",
+      "required": true,
+      "evidence": [
+        "src/adapters/index.js",
+        "src/commands/init.js"
+      ],
+      "verifiedBy": "test"
+    },
+    {
+      "id": "mcp-server",
+      "description": "Expose audit, verify, gate, facts and rules over MCP stdio.",
+      "required": true,
+      "evidence": [
+        "src/mcp/server.js",
+        "src/commands/mcp.js"
+      ],
+      "verifiedBy": "test"
+    }
+  ],
+  "limits": {},
+  "verification": {
+    "timeoutMs": 600000,
+    "requireEvidence": true,
+    "requiredCommands": [
+      "test",
+      "lint"
+    ],
+    "allowNoCommands": false
+  }
+}

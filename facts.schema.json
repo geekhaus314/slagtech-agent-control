@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/geekhaus314/slagtech-agent-control/facts.schema.json",
+  "title": "Slag facts contract",
+  "description": "Facts are confirmed requirements. Agents may not invent unknown or assumed values.",
+  "type": "object",
+  "required": ["version", "facts"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "version": { "const": 1 },
+    "generatedAt": { "type": "string", "format": "date-time" },
+    "facts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "status", "required"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$" },
+          "question": { "type": "string" },
+          "value": {
+            "description": "Confirmed answer. Use 'none' explicitly where a feature is not needed.",
+            "anyOf": [
+              { "type": "string" },
+              { "type": "number" },
+              { "type": "boolean" },
+              { "type": "array" },
+              { "type": "object" },
+              { "type": "null" }
+            ]
+          },
+          "status": { "enum": ["unknown", "assumed", "confirmed"] },
+          "source": {
+            "type": ["string", "null"],
+            "description": "Who or what supplied the value: user answer, initial prompt, CLI flag, user delegated."
+          },
+          "required": { "type": "boolean" },
+          "evidence": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Glob patterns that must match at least one file before the fact is considered proven."
+          },
+          "notes": { "type": ["string", "null"] }
+        },
+        "additionalProperties": true
+      }
+    }
+  },
+  "additionalProperties": true
+}

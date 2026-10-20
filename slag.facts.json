@@ -1,0 +1,163 @@
+{
+  "$schema": "./slag.facts.schema.json",
+  "version": 1,
+  "generatedAt": "2026-10-20T00:44:43.991Z",
+  "facts": [
+    {
+      "id": "delivery.mode",
+      "question": "Is this production software or a prototype/mockup? What quality bar applies? Answer \"production\" or \"prototype\".",
+      "value": "production",
+      "status": "confirmed",
+      "source": "user requirement: production-ready guardrail",
+      "required": true,
+      "evidence": [],
+      "notes": "Production means mock data, placeholders, dead controls and unconfirmed facts fail the gate. Prototype relaxes presentation rules but never security."
+    },
+    {
+      "id": "scope.core",
+      "question": "List the core user actions that must work end-to-end. Each one needs a real path through UI, server and storage.",
+      "value": "Facts-first intake; audit web projects for fake UI, mock backends, dead controls and hallucinations; verify project commands with evidence; gate completion; install agent adapters; expose MCP tools.",
+      "status": "confirmed",
+      "source": "initial prompt + continued implementation direction",
+      "required": true,
+      "evidence": [],
+      "notes": "Example: \"user signs up, creates a project, invites a teammate, and sees it after reload\"."
+    },
+    {
+      "id": "scope.out",
+      "question": "What is explicitly out of scope for this build?",
+      "value": "No hosted SaaS, no code generation, no LLM calls, no framework-specific runtime plugin.",
+      "status": "confirmed",
+      "source": "initial prompt scope",
+      "required": false,
+      "evidence": [],
+      "notes": "Out-of-scope items must not appear in the README as implemented features."
+    },
+    {
+      "id": "stack.frontend",
+      "question": "Which frontend framework, version, router, styling system and component library?",
+      "value": "none - terminal CLI only",
+      "status": "confirmed",
+      "source": "implementation decision: zero-dependency Node CLI",
+      "required": true,
+      "evidence": [],
+      "notes": "Do not assume a stack from the template. Confirm the exact packages and versions."
+    },
+    {
+      "id": "stack.backend",
+      "question": "Which backend/API runtime and hosting model? Use \"none\" only for a genuinely static site.",
+      "value": "Node.js >=18.17 ESM CLI; no application server",
+      "status": "confirmed",
+      "source": "implementation decision: zero-dependency Node CLI",
+      "required": true,
+      "evidence": [],
+      "notes": "Confirm where server code runs before creating API routes or server actions."
+    },
+    {
+      "id": "stack.database",
+      "question": "Which database, ORM/query layer and migration strategy? Use \"none\" if nothing must persist.",
+      "value": "none - JSON files on disk (slag.facts.json, .slag/evidence.json)",
+      "status": "confirmed",
+      "source": "implementation decision: zero-dependency Node CLI",
+      "required": true,
+      "evidence": [],
+      "notes": "A database dependency without a schema or migrations is an unfinished data layer."
+    },
+    {
+      "id": "data.entities",
+      "question": "List the entities, their fields, relationships, and who may access each one.",
+      "value": "Facts contract, project config, verification evidence",
+      "status": "confirmed",
+      "source": "implementation design",
+      "required": false,
+      "evidence": [],
+      "notes": "Each entity must have a real schema/model, not only a TypeScript interface."
+    },
+    {
+      "id": "auth.model",
+      "question": "Who signs in, how are sessions verified server-side, and what roles exist? Use \"none\" for a public app.",
+      "value": "none - local developer CLI",
+      "status": "confirmed",
+      "source": "implementation decision: zero-dependency Node CLI",
+      "required": true,
+      "evidence": [],
+      "notes": "Client-side user flags, localStorage tokens and literal password checks are not auth."
+    },
+    {
+      "id": "payments",
+      "question": "Which payment or billing provider is required? Use \"none\" if not needed.",
+      "value": "none",
+      "status": "confirmed",
+      "source": "implementation decision: zero-dependency Node CLI",
+      "required": false,
+      "evidence": [],
+      "notes": "Name the provider and the flow (checkout, subscription, webhook)."
+    },
+    {
+      "id": "integrations",
+      "question": "Which third-party services are required, and which credentials do they need? Use \"none\" if none.",
+      "value": "npm/npx, git, MCP stdio clients",
+      "status": "confirmed",
+      "source": "implementation design",
+      "required": false,
+      "evidence": [],
+      "notes": "List only integrations that must actually work in this build."
+    },
+    {
+      "id": "deployment",
+      "question": "What is the deployment target, and which environments must work (local, preview, production)?",
+      "value": "npm package slagtech-agent-control, run via npx on Node >=18.17; optional GitHub Actions verification",
+      "status": "confirmed",
+      "source": "implementation decision: zero-dependency Node CLI",
+      "required": true,
+      "evidence": [],
+      "notes": "The build must be runnable on the stated target, not only on the agent machine."
+    },
+    {
+      "id": "quality.acceptance",
+      "question": "What is the definition of done per core action, including tests, error/empty/loading states, and accessibility?",
+      "value": "npm test passes with fixtures for clean and sloppy projects; npm run lint checks syntax; npx slag verify and npx slag gate pass on this repo; every advertised command has runtime coverage.",
+      "status": "confirmed",
+      "source": "project definition of done",
+      "required": true,
+      "evidence": [
+        "**/*.test.*",
+        "**/*.spec.*",
+        "**/tests/**",
+        "**/e2e/**",
+        "**/__tests__/**"
+      ],
+      "notes": "If there are no tests, this fact cannot be proven."
+    },
+    {
+      "id": "data.seed",
+      "question": "Should demo/seed data exist? If yes, should it ever appear in production? How is real data loaded?",
+      "value": "test fixtures only; never wired into product code",
+      "status": "confirmed",
+      "source": "project definition of done",
+      "required": false,
+      "evidence": [],
+      "notes": "Saying yes to seed data does not make mock data a production data source."
+    },
+    {
+      "id": "design.direction",
+      "question": "What brand, references, real copy and real assets should be used? Or has the user explicitly delegated visual direction?",
+      "value": "plain terminal output; color only on a TTY; text, JSON, SARIF and Markdown reports",
+      "status": "confirmed",
+      "source": "implementation design",
+      "required": false,
+      "evidence": [],
+      "notes": "Delegated design still needs real content and functional behavior."
+    },
+    {
+      "id": "nonfunctional",
+      "question": "Expected scale, latency, accessibility, compliance and browser support requirements?",
+      "value": "zero runtime dependencies; deterministic audit; no network calls during audit; works offline",
+      "status": "confirmed",
+      "source": "implementation decision: zero-dependency Node CLI",
+      "required": false,
+      "evidence": [],
+      "notes": "Only list constraints that change implementation decisions."
+    }
+  ]
+}

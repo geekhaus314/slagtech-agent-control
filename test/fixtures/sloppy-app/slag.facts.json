@@ -1,0 +1,21 @@
+{
+  "$schema": "../../../slag.facts.schema.json",
+  "version": 1,
+  "facts": [
+    { "id": "delivery.mode", "value": "production", "status": "confirmed", "source": "fixture", "required": true },
+    { "id": "scope.core", "value": "Users sign up and see a dashboard.", "status": "confirmed", "source": "fixture", "required": true },
+    { "id": "scope.out", "value": "none", "status": "confirmed", "source": "fixture", "required": false },
+    { "id": "stack.frontend", "value": "Vue 3", "status": "confirmed", "source": "fixture", "required": true },
+    { "id": "stack.backend", "value": "Express", "status": "confirmed", "source": "fixture", "required": true },
+    { "id": "stack.database", "value": "PostgreSQL", "status": "confirmed", "source": "fixture", "required": true },
+    { "id": "data.entities", "value": "User, Post", "status": "confirmed", "source": "fixture", "required": false },
+    { "id": "auth.model", "value": "Clerk", "status": "confirmed", "source": "fixture", "required": true },
+    { "id": "payments", "value": "stripe", "status": "confirmed", "source": "fixture", "required": false },
+    { "id": "integrations", "value": "none", "status": "confirmed", "source": "fixture", "required": false },
+    { "id": "deployment", "value": "Vercel", "status": "confirmed", "source": "fixture", "required": true },
+    { "id": "quality.acceptance", "value": null, "status": "unknown", "source": null, "required": true },
+    { "id": "data.seed", "value": "mock data is fine", "status": "confirmed", "source": "fixture", "required": false },
+    { "id": "design.direction", "value": "dark mode", "status": "confirmed", "source": "fixture", "required": false },
+    { "id": "nonfunctional", "value": "fast", "status": "confirmed", "source": "fixture", "required": false }
+  ]
+}
