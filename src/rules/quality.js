@@ -1,4 +1,4 @@
-import { appFiles, apiFiles, forEachMatch, isLikelyUiComponent } from './helpers.js';
+import { appFiles, apiFiles, forEachMatch, isLikelyUiComponent, tagScanText } from './helpers.js';
 
 const TYPE_SUPPRESSION = /(@ts-ignore|@ts-nocheck|@ts-expect-error\b(?!\s*[:\-]?\s*\S)|as\s+any\b|:\s*any\b|<any>)/g;
 const EMPTY_CATCH = /\bcatch\s*(?:\([^)]*\))?\s*\{\s*\}/g;
@@ -82,7 +82,8 @@ export const qualityRules = [
     run(ctx) {
       for (const file of appFiles(ctx)) {
         if (!file.isMarkup && !file.isCode) continue;
-        for (const match of file.text.matchAll(IMG_TAG)) {
+        const text = tagScanText(file);
+        for (const match of text.matchAll(IMG_TAG)) {
           const attrs = match[2];
           if (/\balt\s*=/.test(attrs)) continue;
           if (/\{\.\.\./.test(attrs)) continue;
@@ -101,7 +102,8 @@ export const qualityRules = [
     run(ctx) {
       for (const file of appFiles(ctx)) {
         if (!file.isMarkup && !file.isCode) continue;
-        for (const match of file.text.matchAll(CLICKABLE)) {
+        const text = tagScanText(file);
+        for (const match of text.matchAll(CLICKABLE)) {
           const attrs = match[2];
           if (!/\bonClick\b|\bon:click\b|\b@click\b/.test(attrs)) continue;
           const hasRole = /\brole\s*=\s*["'](button|link)["']/.test(attrs);

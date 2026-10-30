@@ -245,13 +245,14 @@ function dedupeRoutes(routes) {
 }
 
 export function routeToRegExp(routePath) {
-  const segments = routePath.split('/').map((segment) => {
+  const segments = routePath.split('/').filter(Boolean).map((segment) => {
     if (/^\[\[?\.\.\.[^\]]+\]\]?$/.test(segment)) return '.*';
     if (/^\[[^\]]+\]$/.test(segment)) return '[^/]+';
     if (/^:[\w]+$/.test(segment)) return '[^/]+';
     return segment.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   });
-  return new RegExp(`^${segments.join('/')}/?$`);
+  if (segments.length === 0) return /^\/$/;
+  return new RegExp(`^/${segments.join('/')}/?$`);
 }
 
 function routeMatcherFor(route) {

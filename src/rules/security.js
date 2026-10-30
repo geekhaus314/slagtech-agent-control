@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { appFiles, forEachMatch, serverFiles } from './helpers.js';
+import { appFiles, forEachMatch, serverFiles, tagScanText } from './helpers.js';
 
 const SECRET_PATTERNS = [
   { regex: /\bsk-(?:ant-)?[A-Za-z0-9_-]{20,}\b/g, label: 'provider API key' },
@@ -188,7 +188,8 @@ export const securityRules = [
     run(ctx) {
       for (const file of appFiles(ctx)) {
         if (!file.isMarkup && !file.isCode) continue;
-        for (const match of file.text.matchAll(TARGET_BLANK)) {
+        const text = tagScanText(file);
+        for (const match of text.matchAll(TARGET_BLANK)) {
           if (NOOPENER.test(match[0])) continue;
           ctx.report({ file, index: match.index, message: 'target="_blank" link without rel="noopener".' });
         }

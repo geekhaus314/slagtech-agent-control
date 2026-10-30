@@ -102,3 +102,172 @@ export function countMatches(text, regex) {
   while (global.exec(text) !== null) count += 1;
   return count;
 }
+
+const PURE_CODE_EXTENSIONS = new Set(['.js', '.jsx', '.ts', '.tsx', '.mjs', '.cjs']);
+const HYBRID_EXTENSIONS = new Set(['.svelte', '.vue', '.astro']);
+
+/** Files where markup tags only ever exist inside JS literals, never as code. */
+export function isPureCodeFile(file) {
+  return file.isCode && PURE_CODE_EXTENSIONS.has(file.ext) && !HYBRID_EXTENSIONS.has(file.ext);
+}
+
+/**
+ * Offsets-preserving literal blanking for pure JS/TS sources.
+ * Replaces the interior of comments, single/double-quoted strings and regex
+ * literals with spaces, so match.index keeps pointing at the same location
+ * in the original text. Used by markup-tag scanners: in vanilla code files,
+ * a tag inside a string or regex is detection logic, not shipped markup.
+ */
+export function maskCodeLiterals(text) {
+  const out = text.split('');
+  const len = text.length;
+  let i = 0;
+  let state = 'code'; // code | lineComment | blockComment | single | double | regex
+  let inRegexClass = false;
+
+  while (i < len) {
+    const ch = text[i];
+    const next = text[i + 1];
+
+    if (state === 'lineComment') {
+      if (ch === '\n') state = 'code';
+      else out[i] = ' ';
+      i += 1;
+      continue;
+    }
+    if (state === 'blockComment') {
+      if (ch === '*' && next === '/') { out[i] = ' '; out[i + 1] = ' '; state = 'code'; i += 2; continue; }
+      if (ch !== '\n') out[i] = ' ';
+      i += 1;
+      continue;
+    }
+    if (state === 'single' || state === 'double') {
+      if (ch === '\\') { out[i] = ' '; if (i + 1 < len) out[i + 1] = ' '; i += 2; continue; }
+      if (ch !== '\n') out[i] = ' ';
+      if (ch === '\n') state = 'code';
+      else if (state === 'single' && ch === "'") state = 'code';
+      else if (state === 'double' && ch === '"') state = 'code';
+      i += 1;
+      continue;
+    }
+    if (state === 'regex') {
+      if (inRegexClass) {
+        if (ch === '\\') { out[i] = ' '; if (i + 1 < len) out[i + 1] = ' '; i += 2; continue; }
+        if (ch === ']') inRegexClass = false;
+        out[i] = ' ';
+        i += 1;
+        continue;
+      }
+      if (ch === '\\') { out[i] = ' '; if (i + 1 < len) out[i + 1] = ' '; i += 2; continue; }
+      if (ch === '[') { inRegexClass = true; out[i] = ' '; i += 1; continue; }
+      if (ch === '/') {
+        let j = i + 1;
+        while (j < len && /[dgimsuvy]/.test(text[j])) { out[j] = ' '; j += 1; }
+        inRegexClass = false;
+        state = 'code';
+        i = j;
+        continue;
+      }
+      if (ch !== '\n') out[i] = ' ';
+      i += 1;
+      continue;
+    }
+    // state === 'code'
+    if (ch === '/' && next === '/') { state = 'lineComment'; out[i] = ' '; out[i + 1] = ' '; i += 2; continue; }
+    if (ch === '/' && next === '*') { state = 'blockComment'; out[i] = ' '; out[i + 1] = ' '; i += 2; continue; }
+    if (ch === "'") { state = 'single'; out[i] = ' '; i += 1; continue; }
+    if (ch === '"') { state = 'double'; out[i] = ' '; i += 1; continue; }
+    if (ch === '/' && regexOpenerBefore(out, i)) { state = 'regex'; out[i] = ' '; i += 1; continue; }
+    i += 1;
+  }
+  return out.join('');
+}
+
+/** Is the nearest non-space character before position i one that starts a regex literal? */
+function regexOpenerBefore(out, position) {
+  for (let k = position - 1; k >= 0; k -= 1) {
+    const ch = out[k];
+    if (ch === ' ' || ch === '\t' || ch === '\n') continue;
+    if (ch === '\n') {
+      // allow regex after "= new RegExp" etc. only if previous line's last char qualifies
+      continue;
+    }
+    return '([{,;:!&|?=<>+-%*/~^'.includes(ch);
+  }
+  return true;
+}
+
+/**
+ * Copy-scan mask for content rules running on code files: blank lines that
+ * are detection machinery rather than shipped copy — comments, regex
+ * literals, single-string marker-array elements, .includes/.test/.match
+ * calls, and finding(...)/findings.push(...) statements. Line-scoped by
+ * design: product copy living in template literals or object strings stays
+ * fully visible, because that text genuinely ships to users.
+ */
+export function copyScanContext(file) {
+  if (!file.isCode || HYBRID_EXTENSIONS.has(file.ext)) return file.text;
+  const out = [];
+  let inBlockComment = false;
+  for (const line of file.text.split('\n')) {
+    const trimmed = line.trim();
+    if (inBlockComment) {
+      const endIdx = trimmed.indexOf('*/');
+      if (endIdx === -1) {
+        out.push(''.padEnd(line.length, ' '));
+        continue;
+      }
+      inBlockComment = false;
+      const rest = trimmed.slice(endIdx + 2);
+      if (rest === '') {
+        out.push(''.padEnd(line.length, ' '));
+      } else {
+        const offset = line.length - rest.length;
+        out.push(''.padEnd(offset, ' ') + (isMachineryCopyLine(rest) ? ''.padEnd(rest.length, ' ') : rest));
+      }
+      continue;
+    }
+    if (trimmed.startsWith('/*')) {
+      const endIdx = trimmed.indexOf('*/', 2);
+      if (endIdx === -1) {
+        inBlockComment = true;
+        out.push(''.padEnd(line.length, ' '));
+      } else {
+        out.push(''.padEnd(line.length, ' '));
+      }
+      continue;
+    }
+    if (isMachineryCopyLine(trimmed)) {
+      out.push(''.padEnd(line.length, ' '));
+      continue;
+    }
+    out.push(line);
+  }
+  return out.join('\n');
+}
+
+function isMachineryCopyLine(trimmed) {
+  if (trimmed === '' || trimmed.startsWith('//') || trimmed.startsWith('*')) return true;
+  if (isMarkerArrayElement(trimmed)) return true;
+  if (isRegexLiteralLine(trimmed)) return true;
+  if (/\.(includes|test|match|matchAll)\s*\(/.test(trimmed)) return true;
+  if (/\bfinding\s*\(|\bfindings\s*\.\s*push\s*\(/.test(trimmed)) return true;
+  return false;
+}
+
+function isMarkerArrayElement(trimmed) {
+  return /^(['"`])[^'"`]*\1,?\s*$/.test(trimmed);
+}
+
+function isRegexLiteralLine(trimmed) {
+  return /(?:=|return|\(|,|:|!)\/[^/]+\/[dgimsuvy]*\s*[),;:]?$/.test(trimmed) && !/^\(?\/\d/.test(trimmed);
+}
+
+/**
+ * Blank single- and double-quoted string interiors (and comments and regex
+ * literals) for a code file, keeping offsets. Used by markup-tag scanners.
+ */
+export function tagScanText(file) {
+  if (!isPureCodeFile(file)) return file.text;
+  return maskCodeLiterals(file.text);
+}

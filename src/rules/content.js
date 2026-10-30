@@ -1,4 +1,4 @@
-import { appFiles, forEachMatch, uiFiles } from './helpers.js';
+import { appFiles, forEachMatch, uiFiles, copyScanContext } from './helpers.js';
 
 const PLACEHOLDER_COPY = [
   { regex: /\blorem ipsum\b/gi, label: 'lorem ipsum' },
@@ -62,13 +62,18 @@ const AI_TELLS = [
 ];
 
 const UNSUBSTANTIATED = [
-  { regex: /\btrusted by [\d,.]+(\+)?\s*(users|customers|companies|teams|businesses)?/gi, label: 'unsourced social proof' },
-  { regex: /\b[\d,.]+(\+)?\s*(million|thousand|k)?\+?\s*(users|customers|downloads|installs)\b/gi, label: 'unsourced usage number' },
+  { regex: /\btrusted by [\d,.]*(\d)[\d,.]*(\+)?\s*(users|customers|companies|teams|businesses)?/gi, label: 'unsourced social proof' },
+  { regex: /\b[\d,.]*(\d)[\d,.]*\s*(million|thousand|k)?\+?\s*(users|customers|downloads|installs)\b/gi, label: 'unsourced usage number' },
   { regex: /\b(award[- ]winning|industry[- ]leading|world[- ]class|best[- ]in[- ]class|market[- ]leading)\b/gi, label: 'unsourced superlative' },
   { regex: /\b(99\.9|100)% (uptime|satisfaction|accuracy)\b/gi, label: 'unsourced metric' },
   { regex: /\b#1 (in|rated|platform|app)\b/gi, label: 'unsourced ranking' },
   { regex: /\bas (seen|featured) (in|on)\b/gi, label: 'unsourced press claim' },
 ];
+
+/** A file view whose text has detector machinery lines blanked (see copyScanContext). */
+function scanView(file) {
+  return { ...file, text: copyScanContext(file) };
+}
 
 export const contentRules = [
   {
@@ -80,9 +85,10 @@ export const contentRules = [
     hint: 'Replace the placeholder with real product copy, or remove the unfinished section. Do not ship "coming soon" as a feature.',
     run(ctx) {
       for (const file of uiFiles(ctx)) {
+        const view = scanView(file);
         const seen = new Set();
         for (const pattern of PLACEHOLDER_COPY) {
-          forEachMatch(file, pattern.regex, (match, end) => {
+          forEachMatch(view, pattern.regex, (match, end) => {
             if (isNegated(file.text, match.index)) return;
             const key = `${match.index}`;
             if (seen.has(key)) return;
@@ -108,9 +114,10 @@ export const contentRules = [
     hint: 'Delete the generated starter screen and build the real first screen. Starter content is proof the scaffold was never finished.',
     run(ctx) {
       for (const file of uiFiles(ctx)) {
+        const view = scanView(file);
         const seen = new Set();
         for (const pattern of TEMPLATE_BOILERPLATE) {
-          forEachMatch(file, pattern.regex, (match) => {
+          forEachMatch(view, pattern.regex, (match) => {
             const key = `${pattern.label}|${match.index}`;
             if (seen.has(key)) return;
             seen.add(key);
@@ -134,9 +141,10 @@ export const contentRules = [
     run(ctx) {
       for (const file of appFiles(ctx)) {
         if (!file.isSource && !file.isContent) continue;
+        const view = scanView(file);
         const seen = new Set();
         for (const pattern of PLACEHOLDER_IDENTITY) {
-          forEachMatch(file, pattern.regex, (match) => {
+          forEachMatch(view, pattern.regex, (match) => {
             if (seen.has(match.index)) return;
             seen.add(match.index);
             if (/example\.com/.test(match[0]) && /(test|fixture|seed|docs?)\//i.test(file.rel)) return;
@@ -160,9 +168,10 @@ export const contentRules = [
     hint: 'Add the real asset. Placeholder image services and empty src values break the production experience.',
     run(ctx) {
       for (const file of uiFiles(ctx)) {
+        const view = scanView(file);
         const seen = new Set();
         for (const pattern of PLACEHOLDER_MEDIA) {
-          forEachMatch(file, pattern.regex, (match) => {
+          forEachMatch(view, pattern.regex, (match) => {
             if (seen.has(match.index)) return;
             seen.add(match.index);
             ctx.report({
@@ -185,8 +194,9 @@ export const contentRules = [
     hint: 'Replace generic hype with specific, verifiable product language. Name the mechanism, the user, and the outcome.',
     run(ctx) {
       for (const file of uiFiles(ctx)) {
+        const view = scanView(file);
         for (const regex of AI_TELLS) {
-          forEachMatch(file, regex, (match) => {
+          forEachMatch(view, regex, (match) => {
             if (isNegated(file.text, match.index)) return;
             ctx.report({
               file,
@@ -207,8 +217,9 @@ export const contentRules = [
     hint: 'Link the claim to real data, a testimonial, or remove it. Invented numbers are a trust problem, not a design choice.',
     run(ctx) {
       for (const file of uiFiles(ctx)) {
+        const view = scanView(file);
         for (const pattern of UNSUBSTANTIATED) {
-          forEachMatch(file, pattern.regex, (match) => {
+          forEachMatch(view, pattern.regex, (match) => {
             if (isNegated(file.text, match.index)) return;
             ctx.report({
               file,

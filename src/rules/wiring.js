@@ -1,10 +1,16 @@
-import { appFiles } from './helpers.js';
+import { appFiles, tagScanText } from './helpers.js';
 import { matchRoute } from '../core/analyze.js';
 
 const LINK_TAG = /<(a|Link|NavLink|RouterLink|NuxtLink)\b([^>]*)>/gi;
 const BUTTON_TAG = /<button\b([^>]*)>([\s\S]{0,240}?)<\/button>/gi;
 const FORM_TAG = /<form\b([^>]*)>/gi;
 const API_CALL = /\b(fetch|axios\.(get|post|put|patch|delete)|useSWR|useQuery)\s*\(\s*(['"`])(\/[^'"`]+)\3/g;
+
+/** Tag scanners see literal-masked text: in pure code files a `<form` etc.
+ *  inside a string or regex is detection logic, not shipped markup. */
+function tagView(file) {
+  return { ...file, text: tagScanText(file) };
+}
 
 export const wiringRules = [
   {
@@ -17,7 +23,8 @@ export const wiringRules = [
     run(ctx) {
       for (const file of appFiles(ctx)) {
         if (!file.isCode && !file.isMarkup) continue;
-        for (const match of file.text.matchAll(LINK_TAG)) {
+        const view = tagView(file);
+        for (const match of view.text.matchAll(LINK_TAG)) {
           const href = attribute(match[2], 'href');
           if (href == null) continue;
           const value = unwrapValue(href);
@@ -43,7 +50,8 @@ export const wiringRules = [
     run(ctx) {
       for (const file of appFiles(ctx)) {
         if (!file.isCode && !file.isMarkup) continue;
-        for (const match of file.text.matchAll(BUTTON_TAG)) {
+        const view = tagView(file);
+        for (const match of view.text.matchAll(BUTTON_TAG)) {
           const attrs = match[1];
           if (hasWiringAttribute(attrs)) continue;
           if (/\sdisabled(?:\s|=|>)/i.test(attrs)) continue;
@@ -69,7 +77,8 @@ export const wiringRules = [
     run(ctx) {
       for (const file of appFiles(ctx)) {
         if (!file.isCode && !file.isMarkup) continue;
-        for (const match of file.text.matchAll(FORM_TAG)) {
+        const view = tagView(file);
+        for (const match of view.text.matchAll(FORM_TAG)) {
           const attrs = match[1];
           if (hasFormWiring(attrs)) continue;
           ctx.report({
@@ -122,7 +131,8 @@ export const wiringRules = [
       if (ctx.routes.length < 2) return;
       for (const file of appFiles(ctx)) {
         if (!file.isCode && !file.isMarkup) continue;
-        for (const match of file.text.matchAll(LINK_TAG)) {
+        const view = tagView(file);
+        for (const match of view.text.matchAll(LINK_TAG)) {
           const href = attribute(match[2], 'href');
           if (href == null) continue;
           const raw = unwrapValue(href);
@@ -155,7 +165,8 @@ export const wiringRules = [
     run(ctx) {
       for (const file of appFiles(ctx)) {
         if (!file.isCode && !file.isMarkup) continue;
-        for (const match of file.text.matchAll(FORM_TAG)) {
+        const view = tagView(file);
+        for (const match of view.text.matchAll(FORM_TAG)) {
           const action = attribute(match[1], 'action');
           if (action == null) continue;
           const raw = unwrapValue(action);

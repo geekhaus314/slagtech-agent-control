@@ -163,17 +163,38 @@ function checkBackend(ctx) {
     [/\bhono\b/, ['hono'], 'Hono'],
     [/\bkoa\b/, ['koa'], 'Koa'],
     [/\bnest\b/, ['@nestjs/core'], 'NestJS'],
-    [/\bcloudflare\b/, ['wrangler', '@cloudflare/workers-types'], 'Cloudflare Workers'],
+    // Workers run through bindings with no runtime dependency; the adapter,
+    // wrangler (CLI/deploys) or a wrangler config at any depth are the markers.
+    [/\bcloudflare\b/, ['wrangler', '@cloudflare/workers-types', '@sveltejs/adapter-cloudflare', '@cloudflare/vite-plugin'], 'Cloudflare Workers'],
+    [/\bpages\b.*\bcloudflare\b/, ['wrangler', '@sveltejs/adapter-cloudflare'], 'Cloudflare Workers'],
     [/\bsupabase\b/, ['@supabase/supabase-js'], 'Supabase'],
     [/\bfirebase\b/, ['firebase', 'firebase-admin'], 'Firebase'],
   ];
   for (const [regex, deps, label] of checks) {
     if (!regex.test(value)) continue;
-    const configMarker = label === 'Cloudflare Workers' && ctx.files.some((file) => /^wrangler\.(toml|jsonc?|json)$/.test(file.rel));
+    // A wrangler.toml/jsonc anywhere under the repo is the deployment + config signal.
+    const configMarker = label === 'Cloudflare Workers' && ctx.files.some((file) => /(^|\/)wrangler\.(toml|jsonc?|json)$/.test(file.rel));
     if (ctx.hasDependency(deps) || configMarker) return;
     report(ctx, 'stack.backend', `Fact says ${label}, but no matching dependency or config was found.`);
     return;
   }
+}
+
+/** Wrangler config text for D1/SQLite binding detection (any repo depth). */
+function cloudflareConfigText(ctx) {
+  return ctx.files
+    .filter((file) => /(^|\/)wrangler\.(toml|jsonc?|json)$/.test(file.rel))
+    .map((file) => file.text)
+    .join('\n');
+}
+
+/** True when the project declares a Cloudflare D1 binding: in wrangler config
+ *  or in code that uses the D1Database binding type. D1 intentionally has no
+ *  driver dependency — it is accessed through a Worker binding. */
+function hasCloudflareD1(ctx) {
+  const config = cloudflareConfigText(ctx);
+  if (/\bd1_databases?\b/i.test(config)) return true;
+  return ctx.files.some((file) => !file.isTest && !file.isFixture && file.isCode && file.text.includes('D1Database'));
 }
 
 function checkDatabase(ctx) {
@@ -184,18 +205,33 @@ function checkDatabase(ctx) {
     if (hasDb) report(ctx, 'stack.database', 'Fact says no database, but database/ORM dependencies are installed.');
     return;
   }
+  // Cloudflare D1 is a SQLite database accessed through a Worker binding:
+  // there is deliberately no driver dependency, so look for the binding.
+  if (/\bd1\b/.test(value) && hasCloudflareD1(ctx)) return;
   const checks = [
     [/\bprisma\b/, ['prisma', '@prisma/client'], 'Prisma'],
     [/\bdrizzle\b/, ['drizzle-orm'], 'Drizzle'],
     [/\bpostgres/, ['pg', 'postgres', '@neondatabase/serverless', '@vercel/postgres', 'prisma', '@prisma/client', 'drizzle-orm', '@supabase/supabase-js', '@planetscale/database'], 'PostgreSQL'],
     [/\bmysql\b/, ['mysql2', 'mysql', 'prisma', '@prisma/client', 'drizzle-orm'], 'MySQL'],
-    [/\bsqlite\b/, ['better-sqlite3', 'sqlite3', 'libsql', '@libsql/client', 'prisma', '@prisma/client', 'drizzle-orm'], 'SQLite'],
+  ];
+  for (const [regex, deps, label] of checks) {
+    if (!regex.test(value)) continue;
+    if (ctx.hasDependency(deps)) return;
+    report(ctx, 'stack.database', `Fact says ${label}, but no matching driver/ORM is declared.`);
+    return;
+  }
+  if (/\bsqlite\b/.test(value)) {
+    if (ctx.hasDependency(['better-sqlite3', 'sqlite3', 'libsql', '@libsql/client', 'prisma', '@prisma/client', 'drizzle-orm'])) return;
+    if (hasCloudflareD1(ctx)) return;
+    report(ctx, 'stack.database', 'Fact says SQLite, but no driver/ORM or Cloudflare D1 binding was found.');
+    return;
+  }
+  for (const [regex, deps, label] of [
     [/\bmongo(db)?\b/, ['mongodb', 'mongoose', 'prisma', '@prisma/client'], 'MongoDB'],
     [/\bsupabase\b/, ['@supabase/supabase-js'], 'Supabase'],
     [/\bfire(base|store)\b/, ['firebase', 'firebase-admin'], 'Firestore'],
     [/\bredis\b/, ['redis', 'ioredis', '@upstash/redis'], 'Redis'],
-  ];
-  for (const [regex, deps, label] of checks) {
+  ]) {
     if (!regex.test(value)) continue;
     if (ctx.hasDependency(deps)) return;
     report(ctx, 'stack.database', `Fact says ${label}, but no matching driver/ORM is declared.`);
@@ -252,7 +288,14 @@ function checkDeployment(ctx) {
   if (!value || /\bnone\b|\blocal\b/.test(value)) return;
   for (const [name, markers] of Object.entries(DEPLOYMENT_MARKERS)) {
     if (!value.includes(name)) continue;
-    if (ctx.files.some((file) => markers.includes(file.rel))) return;
+    // Config files may live at repo root or inside a nested app directory
+    // (e.g. web/wrangler.toml); match at any depth.
+    const found = ctx.files.some((file) => markers.some((marker) => {
+      if (marker.includes('/')) return false;
+      const escaped = marker.replace(/[.+]/g, '\\$&');
+      return new RegExp(`(?:^|/)${escaped}$`).test(file.rel);
+    }));
+    if (found) return;
     ctx.report({
       ...locateFact(ctx, 'deployment'),
       severity: 'warn',
@@ -268,65 +311,120 @@ function checkEntities(ctx) {
   if (/\bnone\b/.test(database)) return;
   const entry = fact(ctx, 'data.entities');
   if (!entry || !entry.value) return;
-  const entities = extractEntityNames(entry.value);
-  if (entities.length === 0) return;
-  const schemaText = serverFiles(ctx)
-    .filter((file) => !file.isTest && !file.isFixture)
-    .map((file) => file.text)
-    .join('\n');
-  if (!hasSchemaMarkers(schemaText)) {
-    ctx.report({
-      ...locateFact(ctx, 'data.entities'),
-      message: `Facts list entities (${entities.join(', ')}) but no schema/model definitions were found.`,
-      data: { fact: 'data.entities', entities },
-    });
-    return;
+
+  // Schema evidence comes from migrations (.sql is a first-class schema
+  // artifact) plus server code; build the real table/model name set.
+  const schemaFiles = [...serverFiles(ctx), ...ctx.files.filter((file) => file.ext === '.sql')]
+    .filter((file) => !file.isTest && !file.isFixture);
+  const schemaText = [...new Set(schemaFiles)].map((file) => file.text).join('\n');
+  const tables = new Set(collectTableNames(schemaText));
+
+  const missing = [];
+  for (const declaration of extractEntityDeclarations(String(entry.value))) {
+    if (declaration.noTableRequired) continue;
+    const present = declaration.names.some((name) => nameMatchesSchema(name, tables)) ||
+      declaration.aliases.some((alias) => nameMatchesSchema(alias, tables));
+    if (!present) missing.push(declaration.names.join('/'));
   }
-  const missing = entities.filter((entity) => !mentionsEntity(schemaText, entity));
   if (missing.length > 0) {
     ctx.report({
       ...locateFact(ctx, 'data.entities'),
-      message: `Entities missing a model/schema: ${missing.join(', ')}.`,
+      message: `Entities missing a model/schema: ${missing.join(', ')}. Tables found: ${[...tables].slice(0, 20).join(', ') || 'none'}.`,
       data: { fact: 'data.entities', entities: missing },
     });
   }
 }
 
-function extractEntityNames(value) {
-  if (Array.isArray(value)) {
-    return value
-      .map((entry) => (typeof entry === 'string' ? entry : entry?.name))
-      .filter(Boolean)
-      .map((name) => String(name).replace(/[^A-Za-z0-9_]/g, ''))
-      .filter(Boolean)
-      .slice(0, 20);
+/** Every "Name (fields...)" style entity mention in the fact value, with
+ *  per-sentence table aliases and no-table exemptions resolved. */
+function extractEntityDeclarations(value) {
+  const declarations = [];
+  const sentences = value.split(/;\s*|(?:\.\s+|\band\b)\s*(?=[A-Z])/);
+  for (const sentence of sentences) {
+    const noTableRequired = /\bno\s+(?:cached\s+)?table\b|\bmaterialized on read\b/i.test(sentence);
+    if (!/[A-Z][A-Za-z0-9_]*\s*(?:\/\s*[A-Z][A-Za-z0-9_]*\s*)?\(/.test(sentence) && !noTableRequired) continue;
+    const names = [...sentence.matchAll(/\b([A-Z][A-Za-z0-9_]*)(?:\s*\/\s*([A-Z][A-Za-z0-9_]*))*\s*\(\s*\)?/g)];
+    if (names.length === 0) continue;
+    const list = names
+      .flatMap((match) => [match[1], match[2]].filter(Boolean))
+      .filter((name) => /^[A-Z][a-z]/.test(name) || /^[A-Z]+$/.test(name));
+    if (list.length === 0) continue;
+    const aliases = [...sentence.matchAll(/(?:stays|is|as)\s+the\s+([A-Za-z0-9_]+)\s+table\b/gi)].map((match) => match[1]);
+    // "users.id is the Lead canonical id"-style canonicalization
+    for (const match of sentence.matchAll(/\b([a-z0-9_]+)\.id\s+is\s+the\s+/gi)) aliases.push(match[1]);
+    declarations.push({
+      names: [...new Set(list)],
+      aliases: [...new Set(aliases)],
+      noTableRequired,
+    });
   }
-  return String(value)
-    .split(/[,;]|\band\b/)
-    .map((part) => part.trim().replace(/\s*\([^)]*\)\s*$/, '').replace(/\s+/g, ''))
-    .filter((part) => /^[A-Za-z][A-Za-z0-9_]{1,40}$/.test(part))
-    .slice(0, 20);
+  return declarations;
 }
 
-function hasSchemaMarkers(text) {
-  return /\bmodel\s+[A-Z]\w*\s*\{|\bCREATE TABLE\b|\b(pgTable|sqliteTable|mysqlTable|mongoTable)\s*\(|\bmongoose\.model\s*\(|\bsequelize\.define\s*\(|@Entity\b|\bclass\s+\w+\s*\(\s*models\.Model\s*\)|supabase\.from\s*\(|\bdb\.collection\s*\(/i.test(text);
+/** CREATE TABLE names and common ORM model table identifiers from schema code. */
+function collectTableNames(schemaText) {
+  const names = [];
+  for (const match of schemaText.matchAll(/\bCREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?["'`]?([A-Za-z0-9_]+)/gi)) {
+    names.push(match[1]);
+  }
+  for (const match of schemaText.matchAll(/\b(?:pgTable|sqliteTable|mysqlTable|mongoTable|define|table)\s*\(\s*["'`]([A-Za-z0-9_]+)/gi)) {
+    names.push(match[1]);
+  }
+  for (const match of schemaText.matchAll(/\bmongoose\.model\s*\(\s*["'`]([A-Za-z0-9_]+)/gi)) {
+    names.push(match[1]);
+  }
+  return [...new Set(names)];
 }
 
-function mentionsEntity(text, entity) {
-  const lower = entity.toLowerCase();
-  const plural = lower.endsWith('s') ? lower : `${lower}s`;
-  const name = escapeRegExp(entity);
-  const patterns = [
-    new RegExp(`\\bmodel\\s+${name}\\b`),
-    new RegExp(`\\bCREATE TABLE\\s+(IF NOT EXISTS\\s+)?["'\`]?(${lower}|${plural})\\b`, 'i'),
-    new RegExp(`\\b(pgTable|sqliteTable|mysqlTable|table|define)\\s*\\(\\s*["'\`](${lower}|${plural})["'\`]`, 'i'),
-    new RegExp(`\\bmongoose\\.model\\s*\\(\\s*["'\`]${name}\\b`),
-    new RegExp(`\\bclass\\s+${name}\\s*\\(\\s*models\\.Model\\s*\\)`),
-    new RegExp(`\\bsupabase\\.from\\s*\\(\\s*["'\`](${lower}|${plural})["'\`]`, 'i'),
-    new RegExp(`\\bdb\\.collection\\s*\\(\\s*["'\`](${lower}|${plural})["'\`]`, 'i'),
-    new RegExp(`\\b@Entity\\([^)]*\\)[\\s\\S]{0,120}?class\\s+${name}\\b`),
-  ];
-  return patterns.some((pattern) => pattern.test(text));
+/** Entity names match tables at word-stem granularity: split camelCase and
+ *  underscore names into words (JobRun vs job_runs, CommunicationLog vs
+ *  communications), compare against the full name and every stem, with
+ *  tolerant plurals. */
+function nameMatchesSchema(name, tables) {
+  const candidates = wordTokens(name);
+  if (candidates.length === 0) return false;
+  candidates.push(name.toLowerCase().replace(/[^a-z0-9_]/g, ''));
+  for (const table of tables) {
+    const tableTokens = wordTokens(table);
+    tableTokens.push(table.toLowerCase().replace(/[^a-z0-9_]/g, ''));
+    for (const candidate of candidates) {
+      for (const token of tableTokens) {
+        if (token === candidate) return true;
+        if (singularize(token).includes(candidate) || singularize(candidate).includes(token)) return true;
+      }
+    }
+  }
+  return false;
+}
+
+/** camelCase / snake_case words of an identifier, lowercased. */
+function nameStems(identifier) {
+  return identifier
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .split(/[\s_]+/)
+    .filter(Boolean)
+    .map((word) => word.toLowerCase());
+}
+
+function wordTokens(identifier) {
+  return nameStems(identifier).filter((word) => word.length > 2);
+}
+
+const SINGULAR_RULES = [
+  (word) => (word.endsWith('ies') ? `${word.slice(0, -3)}y` : null),
+  (word) => (word.endsWith('sses') ? word.slice(0, -2) : null),
+  (word) => (word.endsWith('hes') || word.endsWith('ches') || word.endsWith('shes') ? word.slice(0, -2) : null),
+  (word) => (word.endsWith('ses') || word.endsWith('xes') || word.endsWith('zes') ? word.slice(0, -1) : null),
+  (word) => (word.endsWith('s') && !word.endsWith('ss') ? word.slice(0, -1) : null),
+];
+
+function singularize(word) {
+  const variants = [word];
+  for (const rule of SINGULAR_RULES) {
+    const variant = rule(word);
+    if (variant) variants.push(variant);
+  }
+  return variants;
 }
 
 function locateFact(ctx, id) {

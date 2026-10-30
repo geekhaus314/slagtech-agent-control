@@ -6,7 +6,7 @@ const INPUT_READ = /\b(await\s+)?(request|req)\.(json|formData|text|body)\b|\baw
 const STATIC_RESPONSE = /\b(?:return\s+)?(?:NextResponse|Response)\.json\s*\(\s*(\[[\s\S]{0,120}\]|\{[\s\S]{0,120}\}|[A-Z][A-Z0-9_]{2,})\s*[,)]|\bres\.(?:json|send)\s*\(\s*(\[[\s\S]{0,120}\]|\{[\s\S]{0,120}\}|[A-Z][A-Z0-9_]{2,})\s*\)/;
 const IN_MEMORY = /^\s*(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*(?::[^=\n]+)?=\s*(new\s+(?:Map|Set)\s*(?:<[^>]*>)?\s*\(\s*\)|\[\s*\]|\{\s*\})\s*;?\s*$/gm;
 const HARDCODED_CREDENTIALS = /(password|passwd|pwd)\s*[:=]\s*['"`](admin|password|123456|letmein|changeme|secret|test)['"`]/gi;
-const PASSWORD_COMPARE = /(password|passwd)\s*===?\s*['"`][^'"`]+['"`]/gi;
+const PASSWORD_COMPARE = /(password|passwd)\s*===?\s*['"`](?!(?:string|number|boolean|object|function|bigint|symbol|undefined)\b)[^'"`]+['"`]/gi;
 const CLIENT_AUTH_REDIRECT = /(?:if\s*\(\s*!(?:user|session|isAuthenticated|auth)\s*\)[\s\S]{0,160}?(?:router\.(?:push|replace)|window\.location|redirect)\s*\(\s*['"`]\/?(login|signin|sign-in|auth)['"`]|useEffect\s*\(\s*\(\s*\)\s*=>\s*\{[\s\S]{0,240}?(?:router\.(?:push|replace)|window\.location)\s*\(\s*['"`]\/?(login|signin|sign-in|auth)['"`])/gi;
 const JWT_DECODE = /\b(jwtDecode|jwt\.decode|decodeJwt|parseJwt)\s*\(/gi;
 const DOCUMENT_COOKIE_AUTH = /document\.cookie\s*=\s*[^;\n]*(token|session|auth|user|jwt)/gi;
@@ -178,13 +178,19 @@ export const backendRules = [
     run(ctx) {
       for (const file of appFiles(ctx)) {
         if (!file.isCode && !file.isMarkup) continue;
-        for (const [regex, message] of [
-          [HARDCODED_CREDENTIALS, 'Hardcoded credential found in source.'],
-          [PASSWORD_COMPARE, 'Password compared against a literal instead of a verified hash.'],
-          [DOCUMENT_COOKIE_AUTH, 'Auth token written to a cookie from client code.'],
-          [JWT_DECODE, 'JWT decoded in application code; decoding is not verification.'],
+        for (const [regex, message, guard] of [
+          [HARDCODED_CREDENTIALS, 'Hardcoded credential found in source.', null],
+          [PASSWORD_COMPARE, 'Password compared against a literal instead of a verified hash.', 'password-type-guard'],
+          [DOCUMENT_COOKIE_AUTH, 'Auth token written to a cookie from client code.', null],
+          [JWT_DECODE, 'JWT decoded in application code; decoding is not verification.', null],
         ]) {
           forEachMatch(file, regex, (match) => {
+            if (guard === 'password-type-guard') {
+              // `typeof input.password === 'string'` is a type check, not a
+              // password literal comparison; skip those matches.
+              const before = file.text.slice(Math.max(0, match.index - 40), match.index);
+              if (/\btypeof\s+\S+(?:\.[\w$]+)*\.$/.test(before)) return;
+            }
             ctx.report({ file, index: match.index, message });
           });
         }
